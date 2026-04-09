@@ -1,0 +1,22 @@
+[
+  {
+    "question": "What is the main purpose of this document?",
+    "ground_truth": "The document explains the key subject matter covered in its introduction and abstract."
+  },
+  {
+    "question": "What are the key findings or conclusions?",
+    "ground_truth": "The key findings are described in the results and conclusion sections of the document."
+  },
+  {
+    "question": "What methodology or approach was used?",
+    "ground_truth": "The methodology section describes the approach, tools, and techniques used in the study."
+  },
+  {
+    "question": "What data or statistics are mentioned?",
+    "ground_truth": "Specific numbers, percentages, or statistics appear in the results section."
+  },
+  {
+    "question": "Who are the authors or what organization produced this?",
+    "ground_truth": "Author information appears on the title page or in the document header."
+  }
+]

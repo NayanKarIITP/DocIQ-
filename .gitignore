@@ -1,0 +1,10 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+ragdb.sqlite3
+qdrant_storage/
+fix_*.py
+nuclear_fix.py
+force_v1_api.py
+*.zip
