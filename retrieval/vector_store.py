@@ -64,6 +64,7 @@ class VectorStore:
     def search(self, query_embedding: list, top_k: int = None,
                filter_doc_id: str = None, filter_chunk_type: str = None) -> list:
         if not self._created:
+            self.create_collection()
             return []
         top_k = top_k or settings.top_k_retrieval
 
@@ -113,6 +114,7 @@ class VectorStore:
 
     def list_documents(self) -> list:
         if not self._created:
+            self.create_collection()
             return []
         seen   = {}
         offset = None
