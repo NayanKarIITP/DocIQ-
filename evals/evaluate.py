@@ -18,12 +18,10 @@ Output:
 """
 
 import argparse
-import asyncio
 import json
 from datetime import datetime
 from pathlib import Path
 
-import pandas as pd
 import requests
 from loguru import logger
 
@@ -152,7 +150,7 @@ def run_evaluation(
 
     results.to_pandas().to_csv(output_dir / f"report_{ts}.csv", index=False)
 
-    logger.success(f"Evaluation complete:")
+    logger.success("Evaluation complete:")
     for metric, score in report["scores"].items():
         emoji = "✓" if score > 0.8 else "⚠" if score > 0.6 else "✗"
         logger.info(f"  {emoji} {metric}: {score:.3f}")

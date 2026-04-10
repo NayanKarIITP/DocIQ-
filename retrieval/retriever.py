@@ -1,5 +1,6 @@
 """retrieval/retriever.py"""
-import json, re
+import json
+import re
 import google.generativeai as genai
 from loguru import logger
 from config import settings

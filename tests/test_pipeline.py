@@ -5,9 +5,6 @@ Unit tests for the RAG pipeline components.
 Run: pytest tests/ -v
 """
 
-import base64
-import io
-import os
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch

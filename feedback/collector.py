@@ -5,7 +5,6 @@ Uses aiosqlite so you don't need PostgreSQL installed.
 
 import uuid
 from datetime import datetime
-from typing import Optional
 
 from loguru import logger
 from sqlalchemy import Column, DateTime, Integer, String, Text, text

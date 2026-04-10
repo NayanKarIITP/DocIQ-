@@ -14,9 +14,7 @@ Run:
     streamlit run ui/app.py
 """
 
-import json
 import uuid
-from typing import Optional
 
 import requests
 import streamlit as st
@@ -97,7 +95,7 @@ with st.sidebar:
         col2.metric("Docs", stats.get("documents", 0))
         col1.metric("Feedback", stats.get("total_feedback", 0))
         col2.metric("Satisfaction", f"{stats.get('satisfaction_rate', 0)}%")
-    except:
+    except Exception:
         st.caption("API offline — start with: uvicorn api.main:app")
 
     st.divider()
@@ -115,7 +113,7 @@ with st.sidebar:
                     st.rerun()
         else:
             st.caption("No documents indexed yet")
-    except:
+    except Exception:
         pass
 
     if st.button("Clear Chat", use_container_width=True):

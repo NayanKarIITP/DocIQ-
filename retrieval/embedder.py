@@ -77,13 +77,15 @@
 
 
 
-import time, base64, io
+import time
+import base64
+import io
 from typing import Optional
 import google.generativeai as genai
 from loguru import logger
 from tenacity import retry, stop_after_attempt, wait_exponential
 from config import settings
-from ingestion.parser import ChunkType, DocumentChunk
+from ingestion.parser import ChunkType
 import PIL.Image
 
 class GeminiEmbedder:

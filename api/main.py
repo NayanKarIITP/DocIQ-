@@ -22,7 +22,6 @@ from typing import Optional
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
 from loguru import logger
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
@@ -182,7 +181,7 @@ async def query(request: QueryRequest):
 
             # Stream the answer
             # Run sync generator in executor to avoid blocking event loop
-            loop = asyncio.get_event_loop()
+            # loop = asyncio.get_event_loop()
             gen = app.state.generator.generate_stream(request.question, chunks)
 
             for token in gen:
