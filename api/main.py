@@ -16,7 +16,6 @@ Run:
     uvicorn api.main:app --reload --port 8000
 """
 
-import asyncio
 from contextlib import asynccontextmanager
 from typing import Optional
 
