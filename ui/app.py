@@ -143,6 +143,39 @@ with st.sidebar:
 
     st.divider()
 
+    # ── Uploaded Documents List & Management ──────────────────────────────
+    docs_list = []
+    try:
+        doc_resp = requests.get(f"{API_URL}/documents", timeout=5)
+        if doc_resp.ok:
+            docs_list = doc_resp.json().get("documents", [])
+    except Exception:
+        pass
+
+    with st.expander(f"📚 Indexed Documents ({len(docs_list)})", expanded=True):
+        if docs_list:
+            for d in docs_list:
+                fname = d.get("filename", "Unknown")
+                doc_id = d.get("doc_id", "")
+                c_txt, c_del = st.columns([0.82, 0.18])
+                with c_txt:
+                    st.caption(f"📄 **{fname}**")
+                with c_del:
+                    if st.button("🗑️", key=f"del_{doc_id}", help=f"Delete {fname} from index"):
+                        try:
+                            del_resp = requests.delete(f"{API_URL}/documents/{doc_id}", timeout=15)
+                            if del_resp.ok:
+                                st.toast(f"Deleted {fname}")
+                                st.rerun()
+                            else:
+                                st.error("Failed to delete")
+                        except Exception as ex:
+                            st.error(f"Error: {ex}")
+        else:
+            st.caption("No documents indexed yet. Upload a PDF above.")
+
+    st.divider()
+
     # Query mode selector
     st.subheader("Query Pipeline")
     mode = st.radio(
@@ -234,20 +267,50 @@ c_mode.markdown(get_mode_badge_html(mode), unsafe_allow_html=True)
 if not st.session_state.messages:
     st.markdown(HERO_BANNER_HTML, unsafe_allow_html=True)
 
+    # ── Dynamic Sample Questions (tailored to uploaded documents) ────────
+    sample_questions = []
+    doc_names = [d.get("filename", "") for d in docs_list]
+    doc_names_lower = " ".join(doc_names).lower()
+
+    if "sql" in doc_names_lower or "db" in doc_names_lower:
+        sample_questions.append(("🔍 Primary vs Foreign Keys", "What is the difference between primary key and foreign key?"))
+        sample_questions.append(("💡 WHERE vs HAVING", "What is the difference between WHERE and HAVING in SQL?"))
+        sample_questions.append(("📊 GROUP BY Clause", "Explain how the GROUP BY clause works with practical examples."))
+
+    if "os" in doc_names_lower or "operating" in doc_names_lower or "process" in doc_names_lower:
+        sample_questions.append(("💻 Process vs Thread", "Explain the difference between a process and a thread with a comparison table."))
+        sample_questions.append(("🔄 CPU Scheduling Algorithms", "Explain CPU scheduling algorithms like Round Robin and FCFS."))
+        sample_questions.append(("🧠 Virtual Memory & Paging", "How does virtual memory and demand paging work in operating systems?"))
+
+    # For other custom documents, generate dynamic questions tailored to their filenames
+    for d in docs_list:
+        raw_fname = d.get("filename", "")
+        clean_name = raw_fname.replace(".pdf", "").replace("_", " ").strip().title()
+        if not clean_name or "sql" in raw_fname.lower() or "os" in raw_fname.lower():
+            continue
+        q1 = (f"📝 Summary of {clean_name[:18]}", f"Provide a comprehensive summary and key takeaways from {raw_fname}.")
+        q2 = (f"🔍 Key Concepts in {clean_name[:18]}", f"Explain the core concepts and definitions discussed in {raw_fname}.")
+        if q1 not in sample_questions:
+            sample_questions.append(q1)
+        if q2 not in sample_questions:
+            sample_questions.append(q2)
+
+    # General default sample questions if no documents are indexed yet
+    if not sample_questions:
+        sample_questions = [
+            ("📄 Summarize Key Concepts", "Summarize the key concepts and main ideas from the indexed documents."),
+            ("📊 Compare Core Topics", "Create a structured comparison table of the major topics discussed in the documents."),
+            ("🔍 What are the Main Takeaways?", "What are the most important takeaways and definitions from the uploaded documents?"),
+        ]
+
     st.caption("Try asking a sample question:")
-    col_a, col_b, col_c = st.columns(3)
-    with col_a:
-        if st.button("💡 Difference between WHERE & HAVING", use_container_width=True):
-            st.session_state.starter_query = "What is the difference between WHERE and HAVING in SQL?"
-            st.rerun()
-    with col_b:
-        if st.button("📊 Explain GROUP BY with examples", use_container_width=True):
-            st.session_state.starter_query = "Explain how the GROUP BY clause works with examples."
-            st.rerun()
-    with col_c:
-        if st.button("🔍 What are primary & foreign keys?", use_container_width=True):
-            st.session_state.starter_query = "What is the difference between primary key and foreign key?"
-            st.rerun()
+    display_q = sample_questions[:3]
+    cols = st.columns(len(display_q))
+    for col, (label, query) in zip(cols, display_q):
+        with col:
+            if st.button(label, use_container_width=True):
+                st.session_state.starter_query = query
+                st.rerun()
     st.divider()
 
 

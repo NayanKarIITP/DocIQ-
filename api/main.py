@@ -440,7 +440,21 @@ async def list_documents():
 @app.delete("/documents/{doc_id}")
 async def delete_document(doc_id: str):
     app.state.vector_store.delete_document(doc_id)
+    try:
+        app.state.retriever._sync_bm25_from_store()
+    except Exception as e:
+        logger.warning(f"Could not re-sync BM25 index after delete: {e}")
     return {"success": True, "doc_id": doc_id}
+
+
+@app.delete("/documents/all/clear")
+async def clear_all_documents():
+    app.state.vector_store.delete_all()
+    try:
+        app.state.retriever._sync_bm25_from_store()
+    except Exception as e:
+        logger.warning(f"Could not re-sync BM25 index after clear: {e}")
+    return {"success": True, "message": "All documents cleared"}
 
 
 @app.get("/stats")

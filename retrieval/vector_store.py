@@ -638,6 +638,14 @@ class VectorStore:
                 f"{doc_id}: {e}"
             )
 
+    def delete_all(self) -> None:
+        """Clear all vectors from the collection."""
+        try:
+            self.create_collection(recreate=True)
+            logger.success(f"Cleared all vectors from '{self.collection}'")
+        except Exception as e:
+            logger.error(f"Failed to clear all vectors: {e}")
+
     # ==============================================================
     # COUNT
     # ==============================================================
