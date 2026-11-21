@@ -3,15 +3,17 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-flash-latest"
+    gemini_model: str = "gemini-3.5-flash-lite"
     gemini_embed_model: str = "gemini-embedding-001"
 
     qdrant_host: str = "localhost"
     qdrant_port: int = 6333
+    qdrant_url: str = ""
+    qdrant_api_key: str = ""
     qdrant_collection: str = "multimodal_rag"
 
     postgres_host: str = "localhost"
-    postgres_port: int = 5432
+    postgres_port: int = 5433
     postgres_db: str = "ragdb"
     postgres_user: str = "raguser"
     postgres_password: str = "ragpassword"
@@ -25,7 +27,7 @@ class Settings(BaseSettings):
     top_k_retrieval: int = 20
     top_k_rerank: int = 5
     # embedding_dim: int = 768
-    embedding_dim: int = 3072
+    embedding_dim: int = 768
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",

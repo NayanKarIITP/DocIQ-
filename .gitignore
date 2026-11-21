@@ -5,6 +5,7 @@ __pycache__/
 *.pyc
 ragdb.sqlite3
 qdrant_storage/
+storage/
 fix_*.py
 *.zip
 qdrant_local/qdrant.exe

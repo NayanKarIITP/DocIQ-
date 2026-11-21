@@ -11,6 +11,7 @@ pytesseract>=0.3.10
 
 # Vector Store
 qdrant-client>=1.9.0
+rank-bm25>=0.2.2
 
 # RAG Framework
 langchain>=0.2.0
@@ -52,3 +53,25 @@ tenacity>=8.3.0
 httpx>=0.27.0
 tqdm>=4.66.0
 aiosqlite
+
+
+# ── NEW: LangChain stack ──────────────────────────────────────────────────
+langchain==0.3.0
+langchain-core==0.3.0
+langchain-google-genai==2.0.0
+langchain-qdrant==0.1.4
+langchain-community==0.3.0
+
+# ── NEW: LangGraph (agentic AI) ───────────────────────────────────────────
+langgraph==0.2.0
+
+# ── NEW: HuggingFace local embedder ──────────────────────────────────────
+sentence-transformers==3.1.0
+transformers==4.44.0
+torch==2.4.0          # CPU-only is fine: pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+# ── NEW: W&B experiment tracking ─────────────────────────────────────────
+wandb==0.18.0
+
+# ── NEW: Web search tool for agent ───────────────────────────────────────
+duckduckgo-search==6.2.0

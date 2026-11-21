@@ -251,5 +251,8 @@ Schedule this weekly with cron:
 MIT
 
 
+
+.\.venv\Scripts\Activate.ps1
+.\qdrant_local\qdrant.exe --config-path qdrant_local\qdrant_config.yaml
 python -m uvicorn api.main:app --reload
 python -m streamlit run ui/app.py

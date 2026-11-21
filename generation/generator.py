@@ -4,43 +4,111 @@ import google.generativeai as genai
 from loguru import logger
 from config import settings
 
-SYSTEM_PROMPT = """You are a precise expert AI assistant. Answer ONLY from the provided context.
-After every factual claim cite the source as [chunk_id].
-If context is insufficient say so. Never hallucinate.
-End with: Sources: [id1], [id2]"""
+SYSTEM_PROMPT = """You are DocIQ, an elite multimodal AI assistant. Answer thoroughly and accurately using ONLY the provided context chunks.
+
+RESPONSE FORMAT RULES (follow exactly):
+1. Citations: After every factual claim, cite as [chunk_id].
+
+2. Structure every answer with clear visual sections using Markdown:
+
+   For COMPARISON questions (e.g. WHERE vs HAVING, Primary Key vs Foreign Key):
+   
+   ## 🔑 [Topic A Name]
+   - **Key trait 1**: explanation [chunk_id]
+   - **Key trait 2**: explanation [chunk_id]
+
+   ## 🔗 [Topic B Name]
+   - **Key trait 1**: explanation [chunk_id]
+   - **Key trait 2**: explanation [chunk_id]
+
+   ## 📊 Comparison Table
+
+   | Feature | Topic A | Topic B |
+   | :--- | :--- | :--- |
+   | Definition | ... [id] | ... [id] |
+   | Null Values | ... | ... |
+
+   For PROCESS / EXECUTION ORDER questions (e.g. SQL execution order):
+
+   ## 📋 Overview
+   Brief explanation [chunk_id].
+
+   ## ⚙️ Step-by-Step
+   1. **Step 1 — WHERE**: Filters rows before grouping [chunk_id].
+   2. **Step 2 — GROUP BY**: Groups filtered rows [chunk_id].
+   3. **Step 3 — HAVING**: Filters aggregated groups [chunk_id].
+
+   ## 📊 Comparison Table
+   (table if applicable)
+
+3. MERMAID FLOWCHART (required for comparisons and process questions):
+   Add a simple Mermaid flowchart at the END (before Sources).
+
+   MERMAID RULES — READ CAREFULLY:
+   * Start EXACTLY like this with newlines:
+     
+     ```mermaid
+     flowchart TD
+     A["Primary Key"] -->|Referenced by| B["Foreign Key"]
+     ```
+   * Put EACH statement on its OWN line. NEVER merge statements on the same line.
+   * Arrow label MUST NOT have quotes: -->|Referenced by|  (NEVER -->|"Referenced by"|).
+   * NO subgraphs, NO -.- dotted lines, NO & symbol (use 'and').
+   * Max 3-5 simple rectangular nodes. Closing ``` on its own line.
+
+4. If context is insufficient: state honestly, do not hallucinate.
+
+5. End with: Sources: [id1], [id2]"""
 
 class RAGGenerator:
     def __init__(self):
         genai.configure(api_key=settings.gemini_api_key)
-        # self.model = genai.GenerativeModel(settings.gemini_model)
         self.model = genai.GenerativeModel(f"models/{settings.gemini_model}")
         self.conversation_history = []
         logger.info(f"Generator ready — model: {settings.gemini_model}")
 
     def generate(self, question: str, chunks: list[dict]) -> str:
         prompt = self._build_prompt(question, chunks)
-        try:
-            response = self.model.generate_content(prompt)
-            answer = response.text
-            self._update_history(question, answer)
-            return answer
-        except Exception as e:
-            logger.error(f"Generation failed: {e}")
-            return f"Error generating answer: {e}"
+        for attempt in range(2):
+            try:
+                response = self.model.generate_content(prompt, request_options={"timeout": 60})
+                answer = response.text
+                self._update_history(question, answer)
+                return answer
+            except Exception as e:
+                err_str = str(e).lower()
+                if attempt == 0 and ("503" in err_str or "504" in err_str or "overloaded" in err_str or "high demand" in err_str):
+                    logger.warning(f"Transient Gemini overload ({e}), retrying generate in 1.5s...")
+                    import time; time.sleep(1.5)
+                    continue
+                logger.error(f"Generation failed: {e}")
+                return f"Error: {e}"
 
     def generate_stream(self, question: str, chunks: list[dict]) -> Generator[str, None, None]:
         prompt = self._build_prompt(question, chunks)
         full_answer = []
-        try:
-            for chunk in self.model.generate_content(prompt, stream=True):
-                token = chunk.text
-                if token:
-                    full_answer.append(token)
-                    yield token
-            self._update_history(question, "".join(full_answer))
-        except Exception as e:
-            logger.error(f"Streaming failed: {e}")
-            yield f"\n\nError: {e}"
+        for attempt in range(2):
+            try:
+                for chunk in self.model.generate_content(prompt, stream=True, request_options={"timeout": 60}):
+                    token = chunk.text
+                    if token:
+                        full_answer.append(token)
+                        yield token
+                self._update_history(question, "".join(full_answer))
+                return
+            except Exception as e:
+                err_str = str(e).lower()
+                if attempt == 0 and ("503" in err_str or "504" in err_str or "overloaded" in err_str or "high demand" in err_str):
+                    logger.warning(f"Transient Gemini overload ({e}), retrying stream in 1.5s...")
+                    import time; time.sleep(1.5)
+                    full_answer = []
+                    continue
+                logger.error(f"Streaming failed: {e}")
+                if not full_answer:
+                    yield f"Error: {e}"
+                else:
+                    yield f"\n\n*(Generation interrupted: {e}. Please retry the query.)*"
+                return
 
     def reset_history(self):
         self.conversation_history = []

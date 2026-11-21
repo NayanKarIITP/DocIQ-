@@ -1,0 +1,31 @@
+services:
+  # ── DocIQ FastAPI Backend ────────────────────────────────────────────────
+  - type: web
+    name: dociq-api
+    runtime: docker
+    dockerfilePath: ./infra/Dockerfile.api
+    plan: free
+    region: oregon
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+      - key: APP_ENV
+        value: production
+
+  # ── DocIQ Streamlit Frontend ─────────────────────────────────────────────
+  - type: web
+    name: dociq-ui
+    runtime: docker
+    dockerfilePath: ./infra/Dockerfile.ui
+    plan: free
+    region: oregon
+    envVars:
+      - key: API_URL
+        fromService:
+          type: web
+          name: dociq-api
+          property: host

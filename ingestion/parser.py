@@ -75,14 +75,15 @@ class DocumentParser:
         self.min_text_length = min_text_length
         self.min_image_size = min_image_size  # pixels, filter tiny images
 
-    def parse(self, file_path: str | Path) -> list[DocumentChunk]:
+    def parse(self, file_path: str | Path, filename: Optional[str] = None) -> list[DocumentChunk]:
         """Parse a PDF file and return all chunks."""
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"File not found: {path}")
 
+        doc_name = filename or path.name
         doc_id = self._make_doc_id(path)
-        logger.info(f"Parsing {path.name} (doc_id={doc_id[:8]}...)")
+        logger.info(f"Parsing {doc_name} (doc_id={doc_id[:8]}...)")
 
         chunks: list[DocumentChunk] = []
 
@@ -93,22 +94,22 @@ class DocumentParser:
             page = pdf[page_num]
 
             # 1. Extract text blocks
-            text_chunks = self._extract_text(page, page_num, doc_id, path.name)
+            text_chunks = self._extract_text(page, page_num, doc_id, doc_name)
             chunks.extend(text_chunks)
 
             # 2. Extract images
-            image_chunks = self._extract_images(pdf, page, page_num, doc_id, path.name)
+            image_chunks = self._extract_images(pdf, page, page_num, doc_id, doc_name)
             chunks.extend(image_chunks)
 
         pdf.close()
 
         # 3. Extract tables (camelot works on the full file)
         if CAMELOT_AVAILABLE:
-            table_chunks = self._extract_tables(path, doc_id)
+            table_chunks = self._extract_tables(path, doc_id, doc_name)
             chunks.extend(table_chunks)
 
         logger.success(
-            f"Parsed {path.name}: "
+            f"Parsed {doc_name}: "
             f"{sum(1 for c in chunks if c.chunk_type == ChunkType.TEXT)} text, "
             f"{sum(1 for c in chunks if c.chunk_type == ChunkType.IMAGE)} image, "
             f"{sum(1 for c in chunks if c.chunk_type == ChunkType.TABLE)} table chunks"
@@ -122,7 +123,7 @@ class DocumentParser:
             tmp.write(file_bytes)
             tmp_path = tmp.name
         try:
-            return self.parse(tmp_path)
+            return self.parse(tmp_path, filename=filename)
         finally:
             Path(tmp_path).unlink(missing_ok=True)
 
@@ -199,7 +200,7 @@ class DocumentParser:
 
         return chunks
 
-    def _extract_tables(self, path: Path, doc_id: str) -> list[DocumentChunk]:
+    def _extract_tables(self, path: Path, doc_id: str, filename: Optional[str] = None) -> list[DocumentChunk]:
         """Extract tables using camelot and convert to markdown."""
         chunks = []
         try:
@@ -218,7 +219,7 @@ class DocumentParser:
                 chunks.append(DocumentChunk(
                     chunk_id=chunk_id,
                     doc_id=doc_id,
-                    filename=path.name,
+                    filename=filename or path.name,
                     page_number=table.page,
                     chunk_type=ChunkType.TABLE,
                     content=f"[TABLE]\n{markdown}",
