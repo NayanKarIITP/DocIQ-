@@ -22,8 +22,8 @@ class Settings(BaseSettings):
     app_env: str = "development"
     log_level: str = "INFO"
     max_upload_size_mb: int = 50
-    chunk_size: int = 800
-    chunk_overlap: int = 100
+    chunk_size: int = 1200
+    chunk_overlap: int = 120
     top_k_retrieval: int = 20
     top_k_rerank: int = 5
     # embedding_dim: int = 768

@@ -21,6 +21,7 @@ from typing import Optional
 import fitz  # PyMuPDF
 from loguru import logger
 from PIL import Image
+from config import settings
 
 try:
     import camelot
@@ -98,8 +99,8 @@ class DocumentParser:
             text_chunks = self._extract_text(page, page_num, doc_id, doc_name)
             chunks.extend(text_chunks)
 
-            # 2. Extract images (limit to top 15 images to prevent upload timeouts)
-            if sum(1 for c in chunks if c.chunk_type == ChunkType.IMAGE) < 15:
+            # 2. Extract images (limit to top 5 images to prevent upload timeouts)
+            if sum(1 for c in chunks if c.chunk_type == ChunkType.IMAGE) < 5:
                 image_chunks = self._extract_images(pdf, page, page_num, doc_id, doc_name)
                 chunks.extend(image_chunks)
 

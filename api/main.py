@@ -149,6 +149,12 @@ async def ingest(file: UploadFile = File(...)):
 
         raw_chunks = await asyncio.to_thread(app.state.parser.parse_bytes, file_bytes, file.filename)
         chunks     = await asyncio.to_thread(app.state.chunker.split, raw_chunks)
+        
+        # Free-tier rate limit protection: cap to 75 chunks to stay safely within Gemini's 100 RPM quota
+        if len(chunks) > 75:
+            logger.info(f"Capping {len(chunks)} chunks to top 75 chunks to protect Gemini API rate limit")
+            chunks = chunks[:75]
+
         embedded   = await asyncio.to_thread(app.state.embedder.embed_chunks, chunks)
         count      = await asyncio.to_thread(app.state.vector_store.upsert, embedded)
 

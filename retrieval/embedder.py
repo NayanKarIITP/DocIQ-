@@ -170,9 +170,20 @@ class GeminiEmbedder:
         # Step 1: Pre-process chunks into text representation
         # --------------------------------------------------------
         processed = []
+        image_vision_count = 0
         for i, chunk in enumerate(chunks):
             try:
-                text = self._get_text(chunk)
+                if chunk.chunk_type == ChunkType.IMAGE:
+                    if chunk.content and len(chunk.content.strip()) > 10:
+                        text = chunk.content
+                    elif image_vision_count < 2:
+                        text = self._describe_image(chunk)
+                        image_vision_count += 1
+                    else:
+                        text = f"Diagram/Figure from {chunk.filename} page {chunk.page_number}"
+                else:
+                    text = self._get_text(chunk)
+
                 if not text or not text.strip():
                     text = (
                         f"Document chunk from "
@@ -209,16 +220,7 @@ class GeminiEmbedder:
                     if emb:
                         results.append((chunk, emb))
             else:
-                # Safe fallback: if batch call failed, embed individually
-                logger.warning(f"Batch {curr_batch_num} failed or returned partial results. Falling back to individual embedding...")
-                for chunk, text in batch:
-                    try:
-                        emb = self._embed(text, "retrieval_document")
-                        if emb:
-                            results.append((chunk, emb))
-                        time.sleep(0.1)
-                    except Exception as e:
-                        logger.error(f"Failed fallback embedding: {e}")
+                logger.warning(f"Batch {curr_batch_num} failed or was throttled; skipping batch to prevent server freeze.")
 
             # Small 0.2s pause between batches to respect rate limits
             time.sleep(0.2)
@@ -375,7 +377,7 @@ class GeminiEmbedder:
                         "and meaningful visual information."
                     )
                 ],
-                request_options={"timeout": 15},
+                request_options={"timeout": 8},
             )
 
             # ----------------------------------------------------
