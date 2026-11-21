@@ -153,7 +153,9 @@ from qdrant_client.models import (
     Distance,
     FieldCondition,
     Filter,
+    FilterSelector,
     MatchValue,
+    PointIdsList,
     PointStruct,
     VectorParams,
 )
@@ -596,47 +598,56 @@ class VectorStore:
         """
         Delete all chunks belonging to a document.
         """
-
         if not self._created:
+            return
 
-            self.create_collection(
-                recreate=False
-            )
-
+        # 1. Attempt delete via FilterSelector
         try:
-
             self.client.delete(
-
                 collection_name=self.collection,
-
-                points_selector=Filter(
-
-                    must=[
-                        FieldCondition(
-
-                            key="doc_id",
-
-                            match=MatchValue(
-                                value=doc_id
-                            ),
-                        )
-                    ]
+                points_selector=FilterSelector(
+                    filter=Filter(
+                        must=[
+                            FieldCondition(
+                                key="doc_id",
+                                match=MatchValue(value=doc_id),
+                            )
+                        ]
+                    )
                 ),
-
                 wait=True,
             )
-
-            logger.success(
-                f"Deleted document "
-                f"{doc_id} from Qdrant"
-            )
-
+            logger.success(f"Deleted document {doc_id} using FilterSelector")
         except Exception as e:
+            logger.warning(f"FilterSelector delete returned error: {e}")
 
-            logger.error(
-                f"Failed to delete document "
-                f"{doc_id}: {e}"
-            )
+        # 2. Comprehensive fallback: scroll and delete any remaining matching point IDs directly
+        try:
+            offset = None
+            ids_to_delete = []
+            while True:
+                results, offset = self.client.scroll(
+                    collection_name=self.collection,
+                    limit=100,
+                    offset=offset,
+                    with_payload=["doc_id"],
+                )
+                for point in results:
+                    payload = point.payload or {}
+                    if payload.get("doc_id") == doc_id:
+                        ids_to_delete.append(point.id)
+                if offset is None:
+                    break
+
+            if ids_to_delete:
+                self.client.delete(
+                    collection_name=self.collection,
+                    points_selector=PointIdsList(points=ids_to_delete),
+                    wait=True,
+                )
+                logger.success(f"Deleted {len(ids_to_delete)} points by ID for doc_id {doc_id}")
+        except Exception as e:
+            logger.error(f"Error during ID scroll cleanup for {doc_id}: {e}")
 
     def delete_all(self) -> None:
         """Clear all vectors from the collection."""
