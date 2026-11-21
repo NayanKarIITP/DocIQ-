@@ -89,24 +89,34 @@ class DocumentParser:
 
         # Open with PyMuPDF
         pdf = fitz.open(str(path))
+        num_pages = len(pdf)
 
-        for page_num in range(len(pdf)):
+        for page_num in range(num_pages):
             page = pdf[page_num]
 
             # 1. Extract text blocks
             text_chunks = self._extract_text(page, page_num, doc_id, doc_name)
             chunks.extend(text_chunks)
 
-            # 2. Extract images
-            image_chunks = self._extract_images(pdf, page, page_num, doc_id, doc_name)
-            chunks.extend(image_chunks)
+            # 2. Extract images (limit to top 15 images to prevent upload timeouts)
+            if sum(1 for c in chunks if c.chunk_type == ChunkType.IMAGE) < 15:
+                image_chunks = self._extract_images(pdf, page, page_num, doc_id, doc_name)
+                chunks.extend(image_chunks)
+
+            # 3. Fast native PyMuPDF table extraction
+            table_chunks = self._extract_tables_fitz(page, page_num, doc_id, doc_name)
+            chunks.extend(table_chunks)
 
         pdf.close()
 
-        # 3. Extract tables (camelot works on the full file)
-        if CAMELOT_AVAILABLE:
-            table_chunks = self._extract_tables(path, doc_id, doc_name)
-            chunks.extend(table_chunks)
+        # 4. Optional Camelot fallback only for small documents (<= 5 pages) in local dev
+        has_tables = any(c.chunk_type == ChunkType.TABLE for c in chunks)
+        if not has_tables and CAMELOT_AVAILABLE and num_pages <= 5 and getattr(settings, "app_env", "") != "production":
+            try:
+                camelot_tables = self._extract_tables(path, doc_id, doc_name)
+                chunks.extend(camelot_tables)
+            except Exception as e:
+                logger.warning(f"Camelot fallback skipped: {e}")
 
         logger.success(
             f"Parsed {doc_name}: "
@@ -175,9 +185,15 @@ class DocumentParser:
                 if img.width < self.min_image_size or img.height < self.min_image_size:
                     continue
 
-                # Convert to PNG base64
+                # Resize large images to conserve memory (Render 512MB limit)
+                if img.width > 800 or img.height > 800:
+                    img.thumbnail((800, 800))
+
+                # Convert to compact JPEG base64
+                if img.mode in ("RGBA", "P"):
+                    img = img.convert("RGB")
                 buffer = io.BytesIO()
-                img.save(buffer, format="PNG")
+                img.save(buffer, format="JPEG", quality=85)
                 image_b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
                 chunk_id = self._make_chunk_id(doc_id, page_num, "image", img_index)
@@ -198,6 +214,37 @@ class DocumentParser:
             except Exception as e:
                 logger.warning(f"Failed to extract image {img_index} on page {page_num}: {e}")
 
+        return chunks
+
+    def _extract_tables_fitz(
+        self, page: fitz.Page, page_num: int, doc_id: str, filename: str
+    ) -> list[DocumentChunk]:
+        """Fast native PyMuPDF table extraction."""
+        chunks = []
+        if not hasattr(page, "find_tables"):
+            return chunks
+        try:
+            tabs = page.find_tables()
+            for i, tab in enumerate(tabs):
+                df = tab.to_pandas()
+                if df.empty:
+                    continue
+                markdown = df.to_markdown(index=False)
+                chunk_id = self._make_chunk_id(doc_id, page_num, "table", i)
+                chunks.append(DocumentChunk(
+                    chunk_id=chunk_id,
+                    doc_id=doc_id,
+                    filename=filename,
+                    page_number=page_num + 1,
+                    chunk_type=ChunkType.TABLE,
+                    content=f"[TABLE]\n{markdown}",
+                    metadata={
+                        "rows": df.shape[0],
+                        "cols": df.shape[1],
+                    },
+                ))
+        except Exception as e:
+            logger.debug(f"Native table extraction skipped on page {page_num}: {e}")
         return chunks
 
     def _extract_tables(self, path: Path, doc_id: str, filename: Optional[str] = None) -> list[DocumentChunk]:

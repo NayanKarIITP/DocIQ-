@@ -182,6 +182,10 @@ async def ingest(file: UploadFile = File(...)):
             )
 
         doc_id = chunks[0].doc_id if chunks else "unknown"
+        # Release memory immediately on low-RAM containers
+        del raw_chunks, chunks, embedded, file_bytes
+        import gc; gc.collect()
+
         return {
             "success":        True,
             "doc_id":         doc_id,
