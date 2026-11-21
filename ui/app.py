@@ -62,6 +62,26 @@ except ImportError:
 st.markdown(load_stylesheet(), unsafe_allow_html=True)
 
 
+def format_error_message(resp) -> str:
+    """Format an HTTP response error cleanly into a concise, human-readable one-liner."""
+    try:
+        data = resp.json()
+        if isinstance(data, dict) and "detail" in data:
+            detail = data["detail"]
+            if isinstance(detail, list) and detail:
+                detail = detail[0].get("msg", str(detail))
+            return str(detail)[:120]
+    except Exception:
+        pass
+    if resp.status_code == 502:
+        return "Server is temporarily busy or restarting (502). Please retry in a moment."
+    if resp.status_code == 504:
+        return "Request timed out on server (504)."
+    if resp.status_code == 413:
+        return "File exceeds upload size limit (413)."
+    return f"Server returned HTTP {resp.status_code}."
+
+
 # ── Session state ─────────────────────────────────────────────────────────
 for key, default in [
     ("messages", []),
@@ -110,9 +130,16 @@ with st.sidebar:
                                 f"📊 {breakdown.get('table',0)})"
                             )
                         else:
-                            st.error(f"✗ {f.name}: {resp.text}")
+                            st.error(f"❌ **{f.name}**: {format_error_message(resp)}")
+                    except requests.exceptions.Timeout:
+                        st.error(f"❌ **{f.name}**: Request timed out. Please retry.")
+                    except requests.exceptions.ConnectionError:
+                        st.error(f"❌ **{f.name}**: Server unavailable. Please check backend status.")
                     except Exception as e:
-                        st.error(f"✗ {f.name}: {e}")
+                        err_str = str(e)
+                        if len(err_str) > 100:
+                            err_str = err_str[:100] + "..."
+                        st.error(f"❌ **{f.name}**: {err_str}")
 
     st.divider()
 
@@ -353,7 +380,7 @@ def stream_sse_query(payload: dict, ctx: dict):
         timeout=120,
     )
     if not resp.ok:
-        yield f"Error ({resp.status_code}): {resp.text}"
+        yield f"Error ({resp.status_code}): {format_error_message(resp)}"
         return
 
     for line in resp.iter_lines(decode_unicode=True):
@@ -484,7 +511,7 @@ if input_prompt:
                             full_response += f"\n\n**Reasoning:** {data['reasoning']}"
 
                 else:
-                    full_response = f"Error ({resp.status_code}): {resp.text}"
+                    full_response = f"Error: {format_error_message(resp)}"
 
             except requests.exceptions.ConnectionError:
                 full_response = (
