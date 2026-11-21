@@ -184,6 +184,10 @@ class VectorStore:
             )
             logger.info(f"Qdrant client initialized: http://{self.host}:{self.port}")
 
+        self.collection = settings.qdrant_collection
+        self.dim = settings.embedding_dim
+        self._created = False
+
     # ==============================================================
     # CREATE / CHECK COLLECTION
     # ==============================================================
