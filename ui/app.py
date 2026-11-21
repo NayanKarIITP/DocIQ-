@@ -11,9 +11,18 @@ Features:
 
 import json
 import os
+from pathlib import Path
 import re
+import sys
 import uuid
 from typing import Optional
+
+# Ensure project root and ui/ directory are in sys.path for Streamlit Cloud
+_current_dir = Path(__file__).resolve().parent
+_root_dir = _current_dir.parent
+for _p in [str(_root_dir), str(_current_dir)]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 import requests
 import streamlit as st
@@ -29,15 +38,26 @@ st.set_page_config(
 )
 
 # ── Load External CSS & UI Templates ──────────────────────────────────────
-from ui.templates import (
-    HERO_BANNER_HTML,
-    get_confidence_badge_html,
-    get_health_pill_html,
-    get_mermaid_html_container,
-    get_mode_badge_html,
-    get_source_card_html,
-    load_stylesheet,
-)
+try:
+    from ui.templates import (
+        HERO_BANNER_HTML,
+        get_confidence_badge_html,
+        get_health_pill_html,
+        get_mermaid_html_container,
+        get_mode_badge_html,
+        get_source_card_html,
+        load_stylesheet,
+    )
+except ImportError:
+    from templates import (
+        HERO_BANNER_HTML,
+        get_confidence_badge_html,
+        get_health_pill_html,
+        get_mermaid_html_container,
+        get_mode_badge_html,
+        get_source_card_html,
+        load_stylesheet,
+    )
 
 st.markdown(load_stylesheet(), unsafe_allow_html=True)
 
