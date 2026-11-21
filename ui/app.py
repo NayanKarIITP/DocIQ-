@@ -272,21 +272,32 @@ if not st.session_state.messages:
     doc_names = [d.get("filename", "") for d in docs_list]
     doc_names_lower = " ".join(doc_names).lower()
 
+    # Balanced primary questions across uploaded topics
     if "sql" in doc_names_lower or "db" in doc_names_lower:
         sample_questions.append(("🔍 Primary vs Foreign Keys", "What is the difference between primary key and foreign key?"))
+    if "os" in doc_names_lower or "operating" in doc_names_lower or "process" in doc_names_lower:
+        sample_questions.append(("💻 Process vs Thread", "Explain the difference between a process and a thread with a comparison table."))
+    if "dsa" in doc_names_lower or "algo" in doc_names_lower or "data structure" in doc_names_lower:
+        sample_questions.append(("🌳 BFS vs DFS Traversals", "Explain the difference between BFS and DFS with time and space complexity."))
+
+    # Secondary questions per topic
+    if "sql" in doc_names_lower or "db" in doc_names_lower:
         sample_questions.append(("💡 WHERE vs HAVING", "What is the difference between WHERE and HAVING in SQL?"))
         sample_questions.append(("📊 GROUP BY Clause", "Explain how the GROUP BY clause works with practical examples."))
 
     if "os" in doc_names_lower or "operating" in doc_names_lower or "process" in doc_names_lower:
-        sample_questions.append(("💻 Process vs Thread", "Explain the difference between a process and a thread with a comparison table."))
         sample_questions.append(("🔄 CPU Scheduling Algorithms", "Explain CPU scheduling algorithms like Round Robin and FCFS."))
         sample_questions.append(("🧠 Virtual Memory & Paging", "How does virtual memory and demand paging work in operating systems?"))
 
-    # For other custom documents, generate dynamic questions tailored to their filenames
+    if "dsa" in doc_names_lower or "algo" in doc_names_lower or "data structure" in doc_names_lower:
+        sample_questions.append(("⚡ Dynamic Programming", "When should you use Dynamic Programming vs a Greedy approach?"))
+        sample_questions.append(("⏱️ Big-O Complexities", "Explain common Big-O time and space complexities with examples."))
+
+    # For custom documents, generate dynamic questions tailored to their filenames
     for d in docs_list:
         raw_fname = d.get("filename", "")
         clean_name = raw_fname.replace(".pdf", "").replace("_", " ").strip().title()
-        if not clean_name or "sql" in raw_fname.lower() or "os" in raw_fname.lower():
+        if not clean_name:
             continue
         q1 = (f"📝 Summary of {clean_name[:18]}", f"Provide a comprehensive summary and key takeaways from {raw_fname}.")
         q2 = (f"🔍 Key Concepts in {clean_name[:18]}", f"Explain the core concepts and definitions discussed in {raw_fname}.")
