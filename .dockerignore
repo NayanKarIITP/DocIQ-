@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+storage/
+qdrant_storage/
+.git/
+.env
+ragdb.sqlite3
+*.zip
+qdrant_local/
+test*.html
