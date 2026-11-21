@@ -129,7 +129,7 @@ async def health():
         "model":          settings.gemini_model,
         "embed_model":    settings.gemini_embed_model,
         "wandb":          tracker_status,
-        "version":        "2.0.0",
+        "version":        "2.1.0",
     }
 
 

@@ -75,6 +75,10 @@ class DocumentParser:
     def __init__(self, min_text_length: int = 50, min_image_size: int = 100):
         self.min_text_length = min_text_length
         self.min_image_size = min_image_size  # pixels, filter tiny images
+        try:
+            fitz.TOOLS.mupdf_display_errors(False)
+        except Exception:
+            pass
 
     def parse(self, file_path: str | Path, filename: Optional[str] = None) -> list[DocumentChunk]:
         """Parse a PDF file and return all chunks."""
@@ -104,9 +108,10 @@ class DocumentParser:
                 image_chunks = self._extract_images(pdf, page, page_num, doc_id, doc_name)
                 chunks.extend(image_chunks)
 
-            # 3. Fast native PyMuPDF table extraction
-            table_chunks = self._extract_tables_fitz(page, page_num, doc_id, doc_name)
-            chunks.extend(table_chunks)
+            # 3. Fast native PyMuPDF table extraction (limit to top 5 tables to prevent RAM spikes)
+            if sum(1 for c in chunks if c.chunk_type == ChunkType.TABLE) < 5:
+                table_chunks = self._extract_tables_fitz(page, page_num, doc_id, doc_name)
+                chunks.extend(table_chunks)
 
         pdf.close()
 
@@ -227,10 +232,16 @@ class DocumentParser:
         try:
             tabs = page.find_tables()
             for i, tab in enumerate(tabs):
-                df = tab.to_pandas()
-                if df.empty:
+                rows = tab.extract()
+                if not rows or len(rows) < 2:
                     continue
-                markdown = df.to_markdown(index=False)
+                header = " | ".join(str(cell or "").replace("\n", " ").strip() for cell in rows[0])
+                sep = " | ".join("---" for _ in rows[0])
+                table_lines = [f"| {header} |", f"| {sep} |"]
+                for row in rows[1:]:
+                    line = " | ".join(str(cell or "").replace("\n", " ").strip() for cell in row)
+                    table_lines.append(f"| {line} |")
+                markdown = "\n".join(table_lines)
                 chunk_id = self._make_chunk_id(doc_id, page_num, "table", i)
                 chunks.append(DocumentChunk(
                     chunk_id=chunk_id,
@@ -240,8 +251,8 @@ class DocumentParser:
                     chunk_type=ChunkType.TABLE,
                     content=f"[TABLE]\n{markdown}",
                     metadata={
-                        "rows": df.shape[0],
-                        "cols": df.shape[1],
+                        "rows": len(rows),
+                        "cols": len(rows[0]) if rows else 0,
                     },
                 ))
         except Exception as e:
