@@ -23,10 +23,10 @@ def load_stylesheet(css_filename: str = "styles.css") -> str:
 HERO_BANNER_HTML = """
 <div class="hero-box">
     <span class="hero-tag">✨ Multimodal Hybrid RAG</span>
+    <span class="hero-tag" style="background:rgba(147, 51, 234, 0.2); border-color:rgba(147, 51, 234, 0.4); color:#c084fc;">📊 Adaptive Visual Flowcharts</span>
     <div class="hero-title">Ask anything from your documents</div>
     <p class="hero-desc">
-        DocIQ parses text, diagrams, images, and tables from PDFs. 
-        Powered by <b>Gemini 3.5 Flash</b>, <b>Qdrant Dense Vectors</b>, and <b>BM25 Keyword Fusion</b>.
+        DocIQ parses text, diagrams, images, and tables from PDFs. Generates <b>interactive visual flowcharts</b> automatically for workflows, architectures, and comparisons.
     </p>
 </div>
 """

@@ -219,6 +219,15 @@ with st.sidebar:
 
     st.divider()
 
+    # Visual diagrams feature banner
+    st.markdown(
+        "<div style='background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.22); border-radius:8px; padding:10px 12px; margin-bottom:14px; font-size:12px; color:#cbd5e1;'>"
+        "📊 <b>Adaptive Visual Diagrams:</b><br>"
+        "DocIQ automatically generates interactive flowcharts for workflows, comparisons & architectures. You can also ask <i>'draw a flowchart'</i>."
+        "</div>",
+        unsafe_allow_html=True
+    )
+
     # System status
     st.subheader("System Health")
     try:
@@ -395,6 +404,7 @@ def render_assistant_content(content: str, key_prefix: str = "hist"):
     mermaid_blocks, clean_text = extract_mermaid_and_clean_text(content)
 
     if mermaid_blocks:
+        st.caption("🗺️ **Interactive Visual Diagram Included** · Switch tabs to explore the flowchart.")
         tab_text, tab_visual = st.tabs(["💬 Explanation", "📊 Visual Diagram"])
         with tab_text:
             st.markdown(clean_text, unsafe_allow_html=True)
@@ -404,6 +414,9 @@ def render_assistant_content(content: str, key_prefix: str = "hist"):
                 render_mermaid(code, key=f"{key_prefix}_m_{idx}")
     else:
         st.markdown(content, unsafe_allow_html=True)
+        # Gentle hint informing the user about the visual diagram capability
+        if len(content.strip()) > 80 and not content.startswith("Error") and "No relevant documents" not in content:
+            st.caption("💡 *Tip: Want a visual flowchart? Ask 'Explain this with a diagram' or 'Draw a flowchart'.*")
 
 
 def render_source_citations(sources: list[dict]):
