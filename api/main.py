@@ -456,7 +456,16 @@ async def get_document_insights(doc_id: str):
     """Generate executive summary, cheat sheet definitions, and practice quiz from document chunks."""
     chunks = await asyncio.to_thread(app.state.vector_store.get_document_chunks, doc_id, limit=20)
     if not chunks:
-        raise HTTPException(404, "Document not found or has no chunks")
+        # Check if doc_id was filename or vice versa
+        all_docs = app.state.vector_store.list_documents()
+        for d in all_docs:
+            if d.get("doc_id") == doc_id or d.get("filename") == doc_id:
+                alt = d.get("filename") if d.get("doc_id") == doc_id else d.get("doc_id")
+                chunks = await asyncio.to_thread(app.state.vector_store.get_document_chunks, alt, limit=20)
+                if chunks:
+                    break
+    if not chunks:
+        raise HTTPException(404, f"Document '{doc_id}' not found or has no chunks")
 
     filename = chunks[0].get("filename", "Document")
     context_text = "\n\n---\n\n".join(

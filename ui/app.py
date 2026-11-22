@@ -164,16 +164,17 @@ with st.sidebar:
                     st.caption(f"📄 **{fname}**")
                 with c_ins:
                     if st.button("✨", key=f"ins_{doc_id}", help=f"Generate Executive Summary, Cheat Sheet & Quiz for {fname}"):
+                        target = doc_id or fname
                         with st.spinner(f"Analyzing {fname}..."):
                             try:
-                                resp = requests.get(f"{API_URL}/documents/{doc_id}/insights", timeout=35)
+                                resp = requests.get(f"{API_URL}/documents/{target}/insights", timeout=45)
                                 if resp.ok:
                                     st.session_state.active_insights = resp.json()
                                     st.rerun()
                                 else:
-                                    st.error("Could not fetch insights.")
+                                    st.toast(f"⚠️ {format_error_message(resp)}")
                             except Exception as ex:
-                                st.error(f"Error: {ex}")
+                                st.toast(f"⚠️ Error: {ex}")
                 with c_del:
                     if st.button("🗑️", key=f"del_{doc_id}", help=f"Delete {fname} from index"):
                         try:

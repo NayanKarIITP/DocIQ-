@@ -820,23 +820,52 @@ class VectorStore:
             logger.error(f"Failed to scroll all Qdrant chunks: {e}")
             return []
 
-    def get_document_chunks(self, doc_id: str, limit: int = 30) -> list[dict]:
-        """Fetch chunks belonging to a specific document."""
+    def get_document_chunks(self, doc_id_or_filename: str, limit: int = 30) -> list[dict]:
+        """Fetch chunks belonging to a specific document with robust scroll fallback."""
         if not self._created:
             return []
+        # Attempt 1: Filtered scroll (fastest if indexed)
         try:
             results, _ = self.client.scroll(
                 collection_name=self.collection,
                 scroll_filter=Filter(
-                    must=[FieldCondition(key="doc_id", match=MatchValue(value=doc_id))]
+                    should=[
+                        FieldCondition(key="doc_id", match=MatchValue(value=doc_id_or_filename)),
+                        FieldCondition(key="filename", match=MatchValue(value=doc_id_or_filename)),
+                    ]
                 ),
                 limit=limit,
                 with_payload=True,
                 with_vectors=False,
             )
-            return [dict(point.payload or {}) for point in results]
+            if results:
+                return [dict(point.payload or {}) for point in results]
         except Exception as e:
-            logger.error(f"Failed to fetch chunks for doc {doc_id}: {e}")
+            logger.warning(f"Filter scroll failed for {doc_id_or_filename}: {e}")
+
+        # Attempt 2: Sequential scroll matching in Python (100% reliable)
+        try:
+            matched = []
+            offset = None
+            while len(matched) < limit:
+                results, offset = self.client.scroll(
+                    collection_name=self.collection,
+                    limit=100,
+                    offset=offset,
+                    with_payload=True,
+                    with_vectors=False,
+                )
+                for point in results:
+                    p = dict(point.payload or {})
+                    if p.get("doc_id") == doc_id_or_filename or p.get("filename") == doc_id_or_filename:
+                        matched.append(p)
+                        if len(matched) >= limit:
+                            break
+                if offset is None or not results:
+                    break
+            return matched
+        except Exception as e:
+            logger.error(f"Fallback scroll failed for doc {doc_id_or_filename}: {e}")
             return []
 
     def get_page_chunks(self, doc_id_or_filename: str, page_number: int) -> list[dict]:
@@ -848,28 +877,44 @@ class VectorStore:
                 collection_name=self.collection,
                 scroll_filter=Filter(
                     must=[
-                        FieldCondition(key="doc_id", match=MatchValue(value=doc_id_or_filename)),
                         FieldCondition(key="page_number", match=MatchValue(value=int(page_number))),
+                    ],
+                    should=[
+                        FieldCondition(key="doc_id", match=MatchValue(value=doc_id_or_filename)),
+                        FieldCondition(key="filename", match=MatchValue(value=doc_id_or_filename)),
                     ]
                 ),
                 limit=50,
                 with_payload=True,
                 with_vectors=False,
             )
-            if not results:
-                results, _ = self.client.scroll(
+            if results:
+                return [dict(point.payload or {}) for point in results]
+        except Exception as e:
+            logger.warning(f"Filter page scroll failed for {doc_id_or_filename} p.{page_number}: {e}")
+
+        # Fallback: Python matching
+        try:
+            matched = []
+            offset = None
+            while len(matched) < 50:
+                results, offset = self.client.scroll(
                     collection_name=self.collection,
-                    scroll_filter=Filter(
-                        must=[
-                            FieldCondition(key="filename", match=MatchValue(value=doc_id_or_filename)),
-                            FieldCondition(key="page_number", match=MatchValue(value=int(page_number))),
-                        ]
-                    ),
-                    limit=50,
+                    limit=100,
+                    offset=offset,
                     with_payload=True,
                     with_vectors=False,
                 )
-            return [dict(point.payload or {}) for point in results]
+                for point in results:
+                    p = dict(point.payload or {})
+                    p_doc = p.get("doc_id")
+                    p_fn = p.get("filename")
+                    p_num = p.get("page_number")
+                    if (p_doc == doc_id_or_filename or p_fn == doc_id_or_filename) and int(p_num or 0) == int(page_number):
+                        matched.append(p)
+                if offset is None or not results:
+                    break
+            return matched
         except Exception as e:
             logger.error(f"Failed to fetch page chunks for {doc_id_or_filename} p.{page_number}: {e}")
             return []
