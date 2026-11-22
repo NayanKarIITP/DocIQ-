@@ -159,35 +159,50 @@ with st.sidebar:
             for d in docs_list:
                 fname = d.get("filename", "Unknown")
                 doc_id = d.get("doc_id", "")
-                c_txt, c_ins, c_del = st.columns([0.64, 0.18, 0.18])
-                with c_txt:
-                    st.caption(f"📄 **{fname}**")
+                
+                # Document Title (full width)
+                st.markdown(
+                    f"<div style='font-size:13px; font-weight:600; color:#f1f5f9; margin-bottom:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;'>"
+                    f"📄 {fname}"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
+
+                # Horizontal Action Buttons
+                c_ins, c_del = st.columns([0.62, 0.38])
                 with c_ins:
-                    if st.button("✨", key=f"ins_{doc_id}", help=f"Generate Executive Summary, Cheat Sheet & Quiz for {fname}"):
-                        target = doc_id or fname
-                        with st.spinner(f"Analyzing {fname}..."):
-                            try:
-                                resp = requests.get(f"{API_URL}/documents/{target}/insights", timeout=45)
-                                if resp.ok:
-                                    st.session_state.active_insights = resp.json()
-                                    st.rerun()
-                                else:
-                                    st.toast(f"⚠️ {format_error_message(resp)}")
-                            except Exception as ex:
-                                st.toast(f"⚠️ Error: {ex}")
+                    clicked_ins = st.button("✨ Insights", key=f"ins_{doc_id}", use_container_width=True, help=f"Generate Executive Summary & Quiz for {fname}")
                 with c_del:
-                    if st.button("🗑️", key=f"del_{doc_id}", help=f"Delete {fname} from index"):
+                    clicked_del = st.button("🗑️ Delete", key=f"del_{doc_id}", use_container_width=True, help=f"Delete {fname} from index")
+
+                # Action Handlers running at full horizontal width (prevents vertical wrapping)
+                if clicked_ins:
+                    target = doc_id or fname
+                    with st.spinner(f"✨ Analyzing {fname}..."):
                         try:
-                            del_resp = requests.delete(f"{API_URL}/documents/{doc_id}", timeout=15)
-                            if del_resp.ok:
-                                st.toast(f"Deleted {fname}")
-                                if st.session_state.active_insights and st.session_state.active_insights.get("filename") == fname:
-                                    st.session_state.active_insights = None
+                            resp = requests.get(f"{API_URL}/documents/{target}/insights", timeout=45)
+                            if resp.ok:
+                                st.session_state.active_insights = resp.json()
                                 st.rerun()
                             else:
-                                st.error("Failed to delete")
+                                st.toast(f"⚠️ {format_error_message(resp)}")
                         except Exception as ex:
-                            st.error(f"Error: {ex}")
+                            st.toast(f"⚠️ Error: {ex}")
+
+                if clicked_del:
+                    try:
+                        del_resp = requests.delete(f"{API_URL}/documents/{doc_id}", timeout=15)
+                        if del_resp.ok:
+                            st.toast(f"Deleted {fname}")
+                            if st.session_state.active_insights and st.session_state.active_insights.get("filename") == fname:
+                                st.session_state.active_insights = None
+                            st.rerun()
+                        else:
+                            st.toast("Failed to delete")
+                    except Exception as ex:
+                        st.toast(f"Error: {ex}")
+
+                st.markdown("<hr style='margin:8px 0 12px 0; border:none; border-top:1px solid rgba(255,255,255,0.08);'>", unsafe_allow_html=True)
         else:
             st.caption("No documents indexed yet. Upload a PDF above.")
 
