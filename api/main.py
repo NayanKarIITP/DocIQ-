@@ -294,9 +294,12 @@ async def query_agent(request: QueryRequest):
     start = time.time()
     try:
         answer = run_agent(request.question)
-        _track(app, request.question, [], start, answer)
+        if isinstance(answer, (list, dict)):
+            answer = json.dumps(answer) if isinstance(answer, dict) else "\n".join(str(x) for x in answer)
+        answer_str = str(answer)
+        _track(app, request.question, [], start, answer_str)
         return {
-            "answer": answer,
+            "answer": answer_str,
             "mode":   "agent",
             "note":   "Agent autonomously chose which tools to use",
         }

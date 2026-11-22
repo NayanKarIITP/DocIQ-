@@ -189,6 +189,27 @@ def get_agent():
     return _agent
 
 
+def _normalize_content_to_str(content) -> str:
+    """Safely convert any LangChain message content (str, list of dicts, or dict) to pure string."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict) and "text" in item:
+                parts.append(str(item["text"]))
+            elif hasattr(item, "text"):
+                parts.append(str(item.text))
+            elif isinstance(item, str):
+                parts.append(item)
+            else:
+                parts.append(str(item))
+        return "\n".join(parts)
+    if isinstance(content, dict):
+        return str(content.get("text", content.get("answer", str(content))))
+    return str(content) if content is not None else ""
+
+
 def run_agent(question: str, max_steps: int = 10) -> str:
     """
     Run a question through the autonomous agent.
@@ -215,7 +236,8 @@ def run_agent(question: str, max_steps: int = 10) -> str:
         )
         # Last message is the final agent response
         final = result["messages"][-1]
-        answer = final.content if hasattr(final, "content") else str(final)
+        raw_content = final.content if hasattr(final, "content") else str(final)
+        answer = _normalize_content_to_str(raw_content)
         logger.success(f"Agent completed in {len(result['messages'])} turns")
         return answer
 
@@ -258,7 +280,9 @@ def run_agent_with_history(
             {"messages": messages},
             config={"recursion_limit": max_steps},
         )
-        return result["messages"][-1].content
+        final = result["messages"][-1]
+        raw_content = final.content if hasattr(final, "content") else str(final)
+        return _normalize_content_to_str(raw_content)
 
     except Exception as e:
         logger.error(f"Agent (with history) failed: {e}")

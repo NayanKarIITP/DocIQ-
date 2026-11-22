@@ -224,6 +224,44 @@ with st.sidebar:
         )
     )
 
+    MODE_DESCRIPTIONS = {
+        "Custom RAG": {
+            "badge": "⚡ Recommended for Daily Q&A",
+            "desc": "Fastest response with real-time token streaming. Uses Hybrid BM25 + Qdrant Dense search and generates adaptive visual flowcharts.",
+            "when": "Ask factual questions, definitions, summaries, and code directly from your uploaded PDFs."
+        },
+        "LangChain RAG": {
+            "badge": "⛓️ Standard Enterprise Chain",
+            "desc": "Industry-standard LangChain LCEL retrieval chain with conversational context.",
+            "when": "When you want to evaluate against an enterprise LangChain baseline."
+        },
+        "Agent (LangGraph)": {
+            "badge": "🤖 Autonomous Multi-Tool Agent",
+            "desc": "ReAct agent that autonomously decides whether to search your documents, query the live web (DuckDuckGo), or calculate math.",
+            "when": "When your question requires outside web knowledge, current statistics, math calculations, or combined doc+web research."
+        },
+        "Chain-of-Thought": {
+            "badge": "🧠 Deep Step-by-Step Reasoning",
+            "desc": "Forces the LLM to write out a reasoning scratchpad and analyze steps before arriving at the final conclusion.",
+            "when": "Complex logic, architecture trade-offs, multi-factor comparisons, or troubleshooting."
+        },
+        "Structured Output": {
+            "badge": "📊 Pydantic Schema + Confidence Score",
+            "desc": "Guarantees a strictly typed schema response with a confidence percentage (0-100%) and context sufficiency check.",
+            "when": "Compliance audits, high-stakes analysis, or when you need explicit confidence ratings."
+        },
+    }
+
+    m_info = MODE_DESCRIPTIONS[mode]
+    st.markdown(
+        f"<div style='background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.25); border-radius:8px; padding:10px 12px; margin-top:8px; font-size:12px; color:#cbd5e1;'>"
+        f"<div style='color:#818cf8; font-weight:700; margin-bottom:3px;'>{m_info['badge']}</div>"
+        f"<div>{m_info['desc']}</div>"
+        f"<div style='margin-top:5px; color:#94a3b8; font-size:11px;'>🎯 <b>When to use:</b> {m_info['when']}</div>"
+        f"</div>",
+        unsafe_allow_html=True
+    )
+
     MODE_ENDPOINT = {
         "Custom RAG":          "/query/sync",
         "LangChain RAG":       "/query/langchain",
@@ -525,6 +563,17 @@ def render_mermaid(diagram_code: str, key: str = "mermaid"):
 
 def extract_mermaid_and_clean_text(content: str) -> tuple[list[str], str]:
     """Extract all Mermaid code blocks and return the cleaned explanation text."""
+    if not isinstance(content, str):
+        if isinstance(content, list):
+            content = "\n\n".join(
+                item.get("text", str(item)) if isinstance(item, dict) else str(item)
+                for item in content
+            )
+        elif isinstance(content, dict):
+            content = content.get("text", content.get("answer", str(content)))
+        else:
+            content = str(content) if content is not None else ""
+
     blocks = re.findall(r"```(?:mermaid|mermaid\w+)[ \t]*\n?([\s\S]*?)```", content, re.IGNORECASE)
     clean_text = re.sub(r"```(?:mermaid|mermaid\w+)[ \t]*\n?([\s\S]*?)```", "", content, flags=re.IGNORECASE).strip()
     
@@ -769,7 +818,17 @@ if input_prompt:
 
                 if resp.ok:
                     data = resp.json()
-                    full_response = data.get("answer", "No answer returned")
+                    raw_answer = data.get("answer", "No answer returned")
+                    if isinstance(raw_answer, list):
+                        full_response = "\n\n".join(
+                            item.get("text", str(item)) if isinstance(item, dict) else str(item)
+                            for item in raw_answer
+                        )
+                    elif isinstance(raw_answer, dict):
+                        full_response = str(raw_answer.get("text", raw_answer.get("answer", raw_answer)))
+                    else:
+                        full_response = str(raw_answer)
+
                     sources       = data.get("sources", [])
                     confidence    = data.get("confidence")
                     agent_note    = data.get("note")
