@@ -347,6 +347,10 @@ class VectorStore:
                             chunk.image_b64 is not None
                         ),
 
+                        "image_b64": (
+                            chunk.image_b64 if chunk.image_b64 else None
+                        ),
+
                         "metadata": chunk.metadata,
                     },
                 )
@@ -833,6 +837,41 @@ class VectorStore:
             return [dict(point.payload or {}) for point in results]
         except Exception as e:
             logger.error(f"Failed to fetch chunks for doc {doc_id}: {e}")
+            return []
+
+    def get_page_chunks(self, doc_id_or_filename: str, page_number: int) -> list[dict]:
+        """Fetch all chunks belonging to a specific page of a document by doc_id or filename."""
+        if not self._created:
+            return []
+        try:
+            results, _ = self.client.scroll(
+                collection_name=self.collection,
+                scroll_filter=Filter(
+                    must=[
+                        FieldCondition(key="doc_id", match=MatchValue(value=doc_id_or_filename)),
+                        FieldCondition(key="page_number", match=MatchValue(value=int(page_number))),
+                    ]
+                ),
+                limit=50,
+                with_payload=True,
+                with_vectors=False,
+            )
+            if not results:
+                results, _ = self.client.scroll(
+                    collection_name=self.collection,
+                    scroll_filter=Filter(
+                        must=[
+                            FieldCondition(key="filename", match=MatchValue(value=doc_id_or_filename)),
+                            FieldCondition(key="page_number", match=MatchValue(value=int(page_number))),
+                        ]
+                    ),
+                    limit=50,
+                    with_payload=True,
+                    with_vectors=False,
+                )
+            return [dict(point.payload or {}) for point in results]
+        except Exception as e:
+            logger.error(f"Failed to fetch page chunks for {doc_id_or_filename} p.{page_number}: {e}")
             return []
 
     # ==============================================================

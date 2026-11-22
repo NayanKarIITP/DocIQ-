@@ -204,6 +204,29 @@ async def ingest(file: UploadFile = File(...)):
         raise HTTPException(500, f"Ingestion failed: {e}")
 
 
+def format_source_dict(c: dict) -> dict:
+    """Format chunk metadata into rich source citation payload."""
+    score = c.get("score")
+    if score is not None:
+        try:
+            score = round(float(score), 3)
+        except (ValueError, TypeError):
+            score = None
+    return {
+        "chunk_id": str(c.get("chunk_id", ""))[:8],
+        "full_chunk_id": str(c.get("chunk_id", "")),
+        "doc_id": str(c.get("doc_id", "")),
+        "filename": c.get("filename", "Document"),
+        "page": c.get("page_number", 1),
+        "type": c.get("chunk_type", "text"),
+        "snippet": str(c.get("content", "")).strip()[:200],
+        "content": str(c.get("content", "")).strip(),
+        "image_b64": c.get("image_b64"),
+        "score": score,
+        "metadata": c.get("metadata", {}),
+    }
+
+
 @app.post("/query/sync")
 async def query_sync(request: QueryRequest):
     """Standard RAG query — custom HyDE + Qdrant pipeline."""
@@ -224,16 +247,7 @@ async def query_sync(request: QueryRequest):
 
     return {
         "answer":  answer,
-        "sources": [
-            {
-                "chunk_id": c.get("chunk_id", "")[:8],
-                "filename": c.get("filename"),
-                "page":     c.get("page_number"),
-                "type":     c.get("chunk_type"),
-                "snippet":  str(c.get("content", "")).strip()[:180],
-            }
-            for c in chunks
-        ],
+        "sources": [format_source_dict(c) for c in chunks],
         "mode": "custom",
     }
 
@@ -360,12 +374,7 @@ async def query_cot(request: QueryRequest):
     return {
         "answer": answer,
         "mode":   "chain_of_thought",
-        "sources": [
-            {"chunk_id": c.get("chunk_id","")[:8],
-             "filename": c.get("filename"),
-             "page":     c.get("page_number")}
-            for c in chunks
-        ],
+        "sources": [format_source_dict(c) for c in chunks],
     }
 
 
@@ -397,12 +406,7 @@ async def query_stream(request: QueryRequest):
                     full_tokens.append(token)
                     yield json.dumps({"token": token})
 
-            sources = [
-                {"chunk_id": c.get("chunk_id","")[:8], "filename": c.get("filename"),
-                 "page": c.get("page_number"), "type": c.get("chunk_type"),
-                 "snippet": str(c.get("content", "")).strip()[:180]}
-                for c in chunks
-            ]
+            sources = [format_source_dict(c) for c in chunks]
             yield json.dumps({"sources": sources})
             yield json.dumps({"done": True})
             _track(app, request.question, chunks, start, "".join(full_tokens))
@@ -503,6 +507,23 @@ OUTPUT FORMAT (in valid JSON only, no markdown codeblocks, just raw JSON):
                 {"question": f"What are the main topics discussed in {filename}?", "answer": "Refer to the indexed sections in chat.", "hint": "Ask in chat"}
             ]
         }
+
+
+@app.get("/documents/{doc_id_or_filename}/page/{page_number}")
+async def get_document_page(doc_id_or_filename: str, page_number: int):
+    """Retrieve all content, tables, and images extracted from a specific document page."""
+    chunks = await asyncio.to_thread(app.state.vector_store.get_page_chunks, doc_id_or_filename, page_number)
+    if not chunks:
+        raise HTTPException(404, f"No content found for '{doc_id_or_filename}' on page {page_number}")
+    filename = chunks[0].get("filename", "Document")
+    doc_id = chunks[0].get("doc_id", doc_id_or_filename)
+    return {
+        "doc_id": doc_id,
+        "filename": filename,
+        "page_number": page_number,
+        "chunks_count": len(chunks),
+        "chunks": [format_source_dict(c) for c in chunks],
+    }
 
 
 @app.delete("/documents/all/clear")

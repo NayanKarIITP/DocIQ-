@@ -92,6 +92,7 @@ for key, default in [
     ("show_correction", False),
     ("starter_query", None),
     ("active_insights", None),
+    ("active_page_view", None),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
@@ -342,6 +343,57 @@ if st.session_state.active_insights:
                 st.caption("No practice questions generated.")
         st.divider()
 
+# ── Interactive Page Visualizer (When Activated) ──────────────────────────
+if st.session_state.active_page_view:
+    pv = st.session_state.active_page_view
+    pv_fname = pv.get("filename", "Document")
+    pv_page = pv.get("page_number", "?")
+    pv_chunks = pv.get("chunks", [])
+
+    with st.container():
+        c_title, c_close = st.columns([0.92, 0.08])
+        with c_title:
+            st.markdown(f"### 📖 Page Inspector: **{pv_fname}** (Page {pv_page})")
+            st.caption(f"Displaying all {len(pv_chunks)} extracted multimodal blocks from this page")
+        with c_close:
+            if st.button("✕", key="close_page_view", help="Close Page View"):
+                st.session_state.active_page_view = None
+                st.rerun()
+
+        for c_idx, c in enumerate(pv_chunks):
+            c_type = c.get("type", "text")
+            c_content = c.get("content", "")
+
+            if c_type == "table" or "[TABLE]" in c_content:
+                st.markdown(f"**📊 Extracted Table #{c_idx+1}**")
+                st.markdown(c_content.replace("[TABLE]", "").strip())
+            elif c_type == "image":
+                st.markdown(f"**🖼️ Visual / Figure #{c_idx+1}**")
+                if c.get("image_b64"):
+                    try:
+                        import base64
+                        st.image(base64.b64decode(c["image_b64"]), caption=f"Extracted from Page {pv_page}")
+                    except Exception:
+                        pass
+                if c_content:
+                    st.caption(f"**Vision Caption:** {c_content}")
+            else:
+                st.markdown(f"**📝 Text Excerpt #{c_idx+1}**")
+                st.markdown(c_content)
+            st.divider()
+
+        col_q, col_cls = st.columns([0.78, 0.22])
+        with col_q:
+            if st.button(f"💬 Ask in Chat: Explain Page {pv_page} in depth", key="ask_page_deep"):
+                st.session_state.starter_query = f"Can you summarize and explain all the core concepts and tables on page {pv_page} of {pv_fname}?"
+                st.session_state.active_page_view = None
+                st.rerun()
+        with col_cls:
+            if st.button("Close Page View", key="btn_close_pv"):
+                st.session_state.active_page_view = None
+                st.rerun()
+        st.divider()
+
 # ── Welcome Hero & Starter Pills (Shown when chat is empty) ───────────────
 if not st.session_state.messages:
     st.markdown(HERO_BANNER_HTML, unsafe_allow_html=True)
@@ -490,35 +542,67 @@ def render_assistant_content(content: str, key_prefix: str = "hist"):
 
 
 def render_source_citations(sources: list[dict], key_prefix: str = "src"):
-    """Renders formatted source citation cards inside an expander with deep-dive inspection."""
+    """Renders formatted source citation cards inside an expander with deep-dive inspection & page visualizer."""
     if not sources:
         return
     with st.expander(f"📑 Sources Cited ({len(sources)} chunks)"):
         for i, s in enumerate(sources):
-            col_card, col_act = st.columns([0.78, 0.22])
+            fname = s.get("filename", "Document")
+            page = s.get("page", 1)
+            doc_id = s.get("doc_id", "")
+            ctype = s.get("type", "text")
+            snippet = s.get("snippet", "")
+            content = s.get("content", snippet)
+            score = s.get("score")
+
+            col_card, col_act = st.columns([0.76, 0.24])
             with col_card:
                 st.markdown(
                     get_source_card_html(
-                        chunk_type=s.get("type", "text"),
-                        filename=s.get("filename", "Document"),
-                        page=str(s.get("page", "?")),
+                        chunk_type=ctype,
+                        filename=fname,
+                        page=str(page),
                         chunk_id=str(s.get("chunk_id", "?")),
                     ),
                     unsafe_allow_html=True,
                 )
             with col_act:
-                score = s.get("score")
                 if score is not None:
                     try:
-                        st.caption(f"🎯 Relevance: `{float(score):.2f}`")
+                        st.caption(f"🎯 Match: `{float(score):.2f}`")
                     except (ValueError, TypeError):
                         pass
 
-            snippet = s.get("snippet", "")
-            if snippet:
+            # If it's a table chunk and has markdown table formatting, render as a nice table
+            if ctype == "table" or "[TABLE]" in content:
+                table_clean = content.replace("[TABLE]", "").strip()
+                st.markdown(table_clean)
+            elif snippet:
                 st.markdown(f"> *\"{snippet.strip()}\"*")
+
+            # Interactive citation inspection actions
+            col_b1, col_b2 = st.columns([0.5, 0.5])
+            with col_b1:
+                if st.button(f"📖 Examine Page {page}", key=f"{key_prefix}_vp_{i}", help=f"View all extracted content and tables from Page {page}"):
+                    target_id = doc_id if doc_id else fname
+                    with st.spinner(f"Loading Page {page} from {fname}..."):
+                        try:
+                            resp = requests.get(f"{API_URL}/documents/{target_id}/page/{page}", timeout=15)
+                            if resp.ok:
+                                st.session_state.active_page_view = resp.json()
+                                st.rerun()
+                            else:
+                                st.error(f"Could not load Page {page}.")
+                        except Exception as ex:
+                            st.error(f"Error loading page: {ex}")
+            with col_b2:
+                if st.button(f"❓ Ask about this excerpt", key=f"{key_prefix}_ask_{i}", help="Ask a question about this excerpt in chat"):
+                    clean_excerpt = snippet[:140].replace("\n", " ").strip()
+                    st.session_state.starter_query = f"Can you explain the following excerpt from page {page} of {fname} in detail:\n\n\"{clean_excerpt}\""
+                    st.rerun()
+
             if i < len(sources) - 1:
-                st.markdown("<hr style='margin:6px 0; border:none; border-top:1px solid rgba(255,255,255,0.06);'>", unsafe_allow_html=True)
+                st.markdown("<hr style='margin:8px 0; border:none; border-top:1px solid rgba(255,255,255,0.08);'>", unsafe_allow_html=True)
 
 
 # ── Render Message History ────────────────────────────────────────────────
@@ -534,7 +618,7 @@ for idx, msg in enumerate(st.session_state.messages):
             st.markdown(get_confidence_badge_html(msg["confidence"]), unsafe_allow_html=True)
 
         # Render rich source citation cards
-        render_source_citations(msg.get("sources", []))
+        render_source_citations(msg.get("sources", []), key_prefix=f"hist_{idx}")
 
         if msg.get("agent_note"):
             st.info(f"🤖 {msg['agent_note']}")
@@ -716,7 +800,7 @@ if input_prompt:
             st.info(f"🤖 {agent_note}")
 
         # Rich source cards beneath assistant message
-        render_source_citations(sources)
+        render_source_citations(sources, key_prefix="live")
 
     st.session_state.messages.append({
         "role":       "assistant",
