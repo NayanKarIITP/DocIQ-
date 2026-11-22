@@ -816,6 +816,25 @@ class VectorStore:
             logger.error(f"Failed to scroll all Qdrant chunks: {e}")
             return []
 
+    def get_document_chunks(self, doc_id: str, limit: int = 30) -> list[dict]:
+        """Fetch chunks belonging to a specific document."""
+        if not self._created:
+            return []
+        try:
+            results, _ = self.client.scroll(
+                collection_name=self.collection,
+                scroll_filter=Filter(
+                    must=[FieldCondition(key="doc_id", match=MatchValue(value=doc_id))]
+                ),
+                limit=limit,
+                with_payload=True,
+                with_vectors=False,
+            )
+            return [dict(point.payload or {}) for point in results]
+        except Exception as e:
+            logger.error(f"Failed to fetch chunks for doc {doc_id}: {e}")
+            return []
+
     # ==============================================================
     # HEALTH CHECK
     # ==============================================================

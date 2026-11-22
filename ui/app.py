@@ -91,6 +91,7 @@ for key, default in [
     ("last_sources", []),
     ("show_correction", False),
     ("starter_query", None),
+    ("active_insights", None),
 ]:
     if key not in st.session_state:
         st.session_state[key] = default
@@ -157,15 +158,29 @@ with st.sidebar:
             for d in docs_list:
                 fname = d.get("filename", "Unknown")
                 doc_id = d.get("doc_id", "")
-                c_txt, c_del = st.columns([0.82, 0.18])
+                c_txt, c_ins, c_del = st.columns([0.64, 0.18, 0.18])
                 with c_txt:
                     st.caption(f"📄 **{fname}**")
+                with c_ins:
+                    if st.button("✨", key=f"ins_{doc_id}", help=f"Generate Executive Summary, Cheat Sheet & Quiz for {fname}"):
+                        with st.spinner(f"Analyzing {fname}..."):
+                            try:
+                                resp = requests.get(f"{API_URL}/documents/{doc_id}/insights", timeout=35)
+                                if resp.ok:
+                                    st.session_state.active_insights = resp.json()
+                                    st.rerun()
+                                else:
+                                    st.error("Could not fetch insights.")
+                            except Exception as ex:
+                                st.error(f"Error: {ex}")
                 with c_del:
                     if st.button("🗑️", key=f"del_{doc_id}", help=f"Delete {fname} from index"):
                         try:
                             del_resp = requests.delete(f"{API_URL}/documents/{doc_id}", timeout=15)
                             if del_resp.ok:
                                 st.toast(f"Deleted {fname}")
+                                if st.session_state.active_insights and st.session_state.active_insights.get("filename") == fname:
+                                    st.session_state.active_insights = None
                                 st.rerun()
                             else:
                                 st.error("Failed to delete")
@@ -244,26 +259,32 @@ with st.sidebar:
 
     st.divider()
 
-    # Indexed documents list
-    st.subheader("Indexed Documents")
-    try:
-        docs = requests.get(f"{API_URL}/documents", timeout=3).json().get("documents", [])
-        if docs:
-            for doc in docs:
-                c1, c2 = st.columns([5, 1])
-                c1.caption(f"📄 {doc['filename']}")
-                if c2.button("✕", key=f"del_{doc['doc_id']}", help="Delete this document"):
-                    requests.delete(f"{API_URL}/documents/{doc['doc_id']}")
-                    st.rerun()
-        else:
-            st.caption("No documents indexed yet")
-    except:
-        pass
+    # Export Study Notes / Q&A
+    if st.session_state.messages:
+        export_md = "# DocIQ Study Notes & Q&A\n\n"
+        for m in st.session_state.messages:
+            role_title = "🧑‍💻 User" if m["role"] == "user" else "◈ DocIQ Assistant"
+            export_md += f"### {role_title}\n\n{m['content']}\n\n"
+            if m.get("sources"):
+                export_md += "**Sources Cited:**\n"
+                for s in m["sources"]:
+                    export_md += f"- `{s.get('filename', 'Doc')}` (Page {s.get('page', '?')}): {s.get('snippet', '')[:120]}...\n"
+                export_md += "\n"
+            export_md += "---\n\n"
+
+        st.download_button(
+            label="📥 Export Notes / Q&A (.md)",
+            data=export_md,
+            file_name="dociq_study_notes.md",
+            mime="text/markdown",
+            use_container_width=True,
+        )
 
     if st.button("🧹 Clear Chat History", use_container_width=True):
         st.session_state.messages = []
         st.session_state.last_answer = None
         st.session_state.last_sources = []
+        st.session_state.active_insights = None
         st.rerun()
 
 
@@ -271,6 +292,55 @@ with st.sidebar:
 c_header, c_mode = st.columns([5, 2])
 c_header.markdown("## ◈ Multimodal Document Assistant")
 c_mode.markdown(get_mode_badge_html(mode), unsafe_allow_html=True)
+
+# ── Document Intelligence Card (When Activated) ──────────────────────────
+if st.session_state.active_insights:
+    insights = st.session_state.active_insights
+    fname = insights.get("filename", "Document")
+    
+    with st.container():
+        c_title, c_close = st.columns([0.92, 0.08])
+        with c_title:
+            st.markdown(f"### ✨ Document Intelligence: **{fname}**")
+        with c_close:
+            if st.button("✕", key="close_insights_panel", help="Close insights"):
+                st.session_state.active_insights = None
+                st.rerun()
+
+        t_sum, t_cheat, t_quiz = st.tabs(["📌 Executive Summary", "🔑 Key Concepts Cheat Sheet", "🎯 Practice & Interview Quiz"])
+        
+        with t_sum:
+            st.markdown(insights.get("summary", "No summary available."))
+            
+        with t_cheat:
+            concepts = insights.get("key_concepts", [])
+            if concepts:
+                for c in concepts:
+                    st.markdown(f"**{c.get('term', '')}**")
+                    st.markdown(f"> {c.get('definition', '')}")
+            else:
+                st.caption("No key concepts extracted.")
+                
+        with t_quiz:
+            quiz = insights.get("practice_quiz", [])
+            if quiz:
+                for q_idx, item in enumerate(quiz):
+                    q_col, btn_col = st.columns([0.78, 0.22])
+                    with q_col:
+                        st.markdown(f"**Q{q_idx+1}:** {item.get('question', '')}")
+                    with btn_col:
+                        if st.button("💬 Ask in Chat", key=f"ask_quiz_{q_idx}"):
+                            st.session_state.starter_query = item.get("question", "")
+                            st.session_state.active_insights = None
+                            st.rerun()
+                    with st.expander("💡 Show Answer & Explanation"):
+                        if item.get("hint"):
+                            st.caption(f"*Hint:* {item['hint']}")
+                        st.markdown(item.get("answer", ""))
+                    st.write("")
+            else:
+                st.caption("No practice questions generated.")
+        st.divider()
 
 # ── Welcome Hero & Starter Pills (Shown when chat is empty) ───────────────
 if not st.session_state.messages:
@@ -419,23 +489,36 @@ def render_assistant_content(content: str, key_prefix: str = "hist"):
             st.caption("💡 *Tip: Want a visual flowchart? Ask 'Explain this with a diagram' or 'Draw a flowchart'.*")
 
 
-def render_source_citations(sources: list[dict]):
-    """Renders formatted source citation cards inside an expander."""
+def render_source_citations(sources: list[dict], key_prefix: str = "src"):
+    """Renders formatted source citation cards inside an expander with deep-dive inspection."""
     if not sources:
         return
     with st.expander(f"📑 Sources Cited ({len(sources)} chunks)"):
-        for s in sources:
-            st.markdown(
-                get_source_card_html(
-                    chunk_type=s.get("type", "text"),
-                    filename=s.get("filename", "Document"),
-                    page=str(s.get("page", "?")),
-                    chunk_id=str(s.get("chunk_id", "?")),
-                ),
-                unsafe_allow_html=True,
-            )
-            if s.get("snippet"):
-                st.caption(f"*\"{s['snippet']}...\"*")
+        for i, s in enumerate(sources):
+            col_card, col_act = st.columns([0.78, 0.22])
+            with col_card:
+                st.markdown(
+                    get_source_card_html(
+                        chunk_type=s.get("type", "text"),
+                        filename=s.get("filename", "Document"),
+                        page=str(s.get("page", "?")),
+                        chunk_id=str(s.get("chunk_id", "?")),
+                    ),
+                    unsafe_allow_html=True,
+                )
+            with col_act:
+                score = s.get("score")
+                if score is not None:
+                    try:
+                        st.caption(f"🎯 Relevance: `{float(score):.2f}`")
+                    except (ValueError, TypeError):
+                        pass
+
+            snippet = s.get("snippet", "")
+            if snippet:
+                st.markdown(f"> *\"{snippet.strip()}\"*")
+            if i < len(sources) - 1:
+                st.markdown("<hr style='margin:6px 0; border:none; border-top:1px solid rgba(255,255,255,0.06);'>", unsafe_allow_html=True)
 
 
 # ── Render Message History ────────────────────────────────────────────────

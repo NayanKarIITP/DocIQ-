@@ -447,6 +447,64 @@ async def delete_document(doc_id: str):
     return {"success": True, "doc_id": doc_id}
 
 
+@app.get("/documents/{doc_id}/insights")
+async def get_document_insights(doc_id: str):
+    """Generate executive summary, cheat sheet definitions, and practice quiz from document chunks."""
+    chunks = await asyncio.to_thread(app.state.vector_store.get_document_chunks, doc_id, limit=20)
+    if not chunks:
+        raise HTTPException(404, "Document not found or has no chunks")
+
+    filename = chunks[0].get("filename", "Document")
+    context_text = "\n\n---\n\n".join(
+        f"[p.{c.get('page_number', '?')}] {c.get('content', '')[:1000]}"
+        for c in chunks[:15]
+    )
+
+    prompt = f"""You are DocIQ, an elite document intelligence analyst.
+Analyze the following excerpts from "{filename}" and generate structured learning and executive insights.
+
+CONTEXT:
+{context_text}
+
+OUTPUT FORMAT (in valid JSON only, no markdown codeblocks, just raw JSON):
+{{
+  "filename": "{filename}",
+  "summary": "A 3-bullet concise executive summary covering the main purpose, scope, and key takeaways.",
+  "key_concepts": [
+    {{"term": "Key Concept 1", "definition": "Crisp 1-2 sentence definition or rule based on context"}},
+    {{"term": "Key Concept 2", "definition": "Crisp 1-2 sentence definition or rule based on context"}},
+    {{"term": "Key Concept 3", "definition": "Crisp 1-2 sentence definition or rule based on context"}}
+  ],
+  "practice_quiz": [
+    {{"question": "Practice or interview question 1", "answer": "Clear, direct answer explaining the concept", "hint": "Short clue"}},
+    {{"question": "Practice or interview question 2", "answer": "Clear, direct answer explaining the concept", "hint": "Short clue"}},
+    {{"question": "Practice or interview question 3", "answer": "Clear, direct answer explaining the concept", "hint": "Short clue"}}
+  ]
+}}"""
+
+    try:
+        import google.generativeai as genai
+        model = genai.GenerativeModel(f"models/{settings.gemini_model}")
+        resp = await asyncio.to_thread(
+            model.generate_content,
+            prompt,
+            generation_config={"response_mime_type": "application/json"}
+        )
+        return json.loads(resp.text)
+    except Exception as e:
+        logger.error(f"Failed to generate insights: {e}")
+        return {
+            "filename": filename,
+            "summary": f"Document {filename} contains {len(chunks)} indexed semantic chunks.",
+            "key_concepts": [
+                {"term": "Core Document Content", "definition": f"Extracted from {filename}."}
+            ],
+            "practice_quiz": [
+                {"question": f"What are the main topics discussed in {filename}?", "answer": "Refer to the indexed sections in chat.", "hint": "Ask in chat"}
+            ]
+        }
+
+
 @app.delete("/documents/all/clear")
 async def clear_all_documents():
     app.state.vector_store.delete_all()
